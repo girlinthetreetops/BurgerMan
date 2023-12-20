@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Events;
 
 public class Player : MonoBehaviour
 {
@@ -13,43 +14,72 @@ public class Player : MonoBehaviour
     [SerializeField] private GameInput gameInput;
     [SerializeField] private LayerMask kitchenUnitLayerMask;
 
-    private bool isWalking;
+    //just for debugging really
+    [SerializeField] public ClearCounter selectedCounter;
+    [SerializeField] private bool isWalking;
+
     private Vector3 facingDirection;
+
+    //events
+    public UnityEvent OnSelectedCounterChanged;  
 
     private void Start()
     {
-        //subscribe to the new onInteraction event...
+        //subscribe to the new onInteraction UnityEvent made in GameInput
         gameInput.OnInteractAction.AddListener(OnInteractAction);
-    }
+    } 
 
     private void Update()
     {
         HandleMovement();
+        HandleInteractions();
+    }
+ 
+    public void HandleInteractions()
+    {
+        Vector2 inputVector = gameInput.GetNormalizedMovementVector();
+        Vector3 movementDirection = new Vector3(inputVector.x, 0f, inputVector.y);
+        if (movementDirection != Vector3.zero) //keep track  of last interaction to keep detection even when movDirection is zero 
+        {
+            facingDirection = movementDirection;
+        } 
+
+        //Check for things on the kitchenUnitLayerMask (and get a data sheet)
+        if (Physics.Raycast(transform.position, facingDirection, out RaycastHit raycastHit, reachDistance, kitchenUnitLayerMask))
+        {
+            //Check if its a ClearCounter, specifically
+            if (raycastHit.transform.TryGetComponent(out ClearCounter clearCounter))
+            {
+                //check if youve already made this your selected counter, and if not - select it!
+                if (clearCounter != selectedCounter)
+                {
+                    setSelectedCounter(clearCounter);
+
+                } else //if its been selected already, deselect it... ?
+                {
+                    setSelectedCounter(null);
+                }
+            } else //if its not a counter, we dont wat a selected counter
+            {
+                setSelectedCounter(null);
+            }
+        }
+    }
+
+    private void setSelectedCounter(ClearCounter passedCounter)
+    {
+        selectedCounter = passedCounter;
+        OnSelectedCounterChanged.Invoke();
     }
 
     private void OnInteractAction()
     {
-        //This is neat - this event is triggered by the Gameinput script, meaning its not called each frame like movement and collisions. 
-        //new raycast direction that isnt amended if you crash, like the movement one
-        Vector2 inputVector = gameInput.GetNormalizedMovementVector();
-        Vector3 movementDirection = new Vector3(inputVector.x, 0f, inputVector.y);
-
-        //keep track of last interaction to keep detection even when movDirection is zero 
-        if (movementDirection != Vector3.zero)
+        if (selectedCounter != null)
         {
-            facingDirection = movementDirection;
-        }
-
-        //Check if getting anything with a variant of raycast that returns more than a bool. it defines a new variable of RaycastHit called raycastHit and giving it directly to the function immediately to use is afterwards...The raycasthit will be filled with data from what you detect! Last thing is the layermask we check. 
-        if (Physics.Raycast(transform.position, facingDirection, out RaycastHit raycastHit, reachDistance, kitchenUnitLayerMask))
-        {
-            //Check if its a clearcounter and interact if so
-            if (raycastHit.transform.TryGetComponent(out ClearCounter clearCounter))
-            {
-                clearCounter.Interact();
-            }
+            selectedCounter.Interact();
         }
     }
+
 
     private void HandleMovement()
     {
